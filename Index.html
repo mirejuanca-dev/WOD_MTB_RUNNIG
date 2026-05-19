@@ -876,8 +876,8 @@ function updateBkStatus(){
 function exportJSON(){
   if(!activities.length){alert('Sin actividades');return;}
   const d={v:1,exportedAt:new Date().toISOString(),activities:activities.map(a=>({...a,startTime:a.startTime.toISOString()}))};
-  dl(JSON.stringify(d,null,2),'application/json','hranalyzer_'+today()+'.json');
-  showBkAlert('ok','📦 '+activities.length+' actividades exportadas. Guarda el archivo en iCloud o Google Drive.');
+  dlData(JSON.stringify(d,null,2),'application/json','hranalyzer_'+today()+'.json');
+  showBkAlert('ok','📦 '+activities.length+' actividades listas para descargar.');
 }
 function importJSON(input){
   const file=input.files[0];if(!file)return;
@@ -899,7 +899,7 @@ function importJSON(input){
 }
 function exportCSV(){
   if(!activities.length){alert('Sin actividades');return;}
-  const zones=getZones(),types={mtb:'Mountain Bike',hiking:'Hiking',wod:'WOD',run:'Running',other:'Otra'};
+  const types={mtb:'Mountain Bike',hiking:'Hiking',wod:'WOD',run:'Running',other:'Otra'};
   const hdr='Nombre,Tipo,Fecha,Duracion (min),FC Max,FC Media,FC Min,% FCmax,P95,Recuperacion,TRIMP,Esfuerzo,Z1%,Z2%,Z3%,Z4%,Z5%,Zona,Lecturas';
   const rows=activities.sort((a,b)=>b.startTime-a.startTime).map(a=>{
     const tot=a.zoneTimes.reduce((s,v)=>s+v,0)||1,tz=a.zoneTimes.indexOf(Math.max(...a.zoneTimes));
@@ -908,14 +908,79 @@ function exportCSV(){
       Math.round(a.max/profile.maxHR*100),a.p95||'',a.recovery>0?a.recovery:'',
       trimp(a),effort(a),...a.zoneTimes.map(t=>Math.round(t/tot*100)),'Z'+(tz+1),a.hrData.length].join(',');
   });
-  dl('\uFEFF'+[hdr,...rows].join('\n'),'text/csv;charset=utf-8;','hranalyzer_'+today()+'.csv');
-  showBkAlert('ok','📊 '+activities.length+' actividades exportadas en CSV. Numbers y Excel lo abren directamente.');
+  dlData([hdr,...rows].join('\n'),'text/csv','hranalyzer_'+today()+'.csv');
+  showBkAlert('ok','📊 '+activities.length+' actividades listas para descargar en CSV.');
 }
-function dl(content,type,filename){
-  const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+
+function dlData(content, type, filename) {
+  // Try standard download first
+  try {
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  } catch(e) {}
+
+  // Fallback: data URI
+  try {
+    const encoded = type.includes('json')
+      ? 'data:application/json;charset=utf-8,' + encodeURIComponent(content)
+      : 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
+    const a = document.createElement('a');
+    a.href = encoded; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    return;
+  } catch(e) {}
+
+  // Last resort: show in modal for manual copy
+  showExportModal(content, filename);
 }
-function today(){return new Date().toISOString().slice(0,10);}
+
+function showExportModal(content, filename) {
+  // Remove existing modal if any
+  const existing = document.getElementById('exportModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'exportModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--accent)">📋 Exportar: ${filename}</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:3px">Copia el contenido y pégalo en un archivo de texto. Guárdalo con el nombre <strong>${filename}</strong></div>
+        </div>
+        <button onclick="document.getElementById('exportModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-dim)">×</button>
+      </div>
+      <button onclick="copyExport()" class="btn btn-primary" style="margin-bottom:12px;width:100%">📋 Copiar todo al portapapeles</button>
+      <textarea id="exportContent" readonly style="flex:1;min-height:300px;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;resize:none;background:var(--surface2);color:var(--text)">${content.replace(/</g,'&lt;')}</textarea>
+    </div>`;
+  document.body.appendChild(modal);
+  // Actually set the textarea value (not innerHTML to avoid HTML encoding issues)
+  document.getElementById('exportContent').value = content;
+}
+
+function copyExport() {
+  const ta = document.getElementById('exportContent');
+  ta.select();
+  try {
+    navigator.clipboard.writeText(ta.value).then(() => {
+      showBkAlert('ok', '✅ Copiado al portapapeles. Pégalo en un archivo de texto y guárdalo.');
+    }).catch(() => {
+      document.execCommand('copy');
+      showBkAlert('ok', '✅ Copiado. Pégalo en un archivo de texto y guárdalo.');
+    });
+  } catch(e) {
+    document.execCommand('copy');
+    showBkAlert('ok', '✅ Copiado. Pégalo en un archivo de texto y guárdalo.');
+  }
+}
 function showBkAlert(type,text){
   const el=document.getElementById('backupStatus'),t=document.getElementById('backupStatusText');
   el.className='alert alert-'+type;el.style.display='flex';t.textContent=text;
