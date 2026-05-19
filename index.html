@@ -94,8 +94,53 @@ canvas{display:block;}
 .cfgrow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border);}
 .cfgrow:last-of-type{border-bottom:none;}.cfglbl{font-size:13px;}.cfglbl small{display:block;color:var(--text-dim);font-size:11px;margin-top:2px;}
 .cfgrow input{width:90px;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;text-align:center;background:var(--surface2);color:var(--text);}
+
+/* === PEAK DETECTION STYLES === */
+.peak-item{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  border-bottom:1px solid var(--surface2);transition:background .15s;
+}
+.peak-item:last-child{border-bottom:none;}
+.peak-item:hover{background:var(--surface2);}
+.peak-badge{
+  flex-shrink:0;width:44px;height:44px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;color:#fff;
+}
+.peak-info{flex:1;min-width:0;}
+.peak-bpm{font-size:18px;font-weight:800;line-height:1;}
+.peak-meta{font-size:11px;color:var(--text-dim);margin-top:2px;}
+.peak-dur-bar{
+  display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;
+}
+.peak-dur-val{font-size:13px;font-weight:700;color:var(--text-mid);}
+.peak-dur-sub{font-size:10px;color:var(--text-dim);}
+.peak-minibar{height:4px;border-radius:2px;min-width:40px;max-width:80px;}
+
+.peaks-summary{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;
+}
+.peaks-summary-item{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:12px;text-align:center;
+}
+.peaks-summary-item .val{font-size:22px;font-weight:800;line-height:1;margin-bottom:2px;}
+.peaks-summary-item .lbl{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--text-dim);}
+
+.peak-threshold-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:14px;
+}
+.peak-threshold-row label{font-size:12px;font-weight:600;color:var(--text-mid);}
+.peak-threshold-row small{display:block;font-size:10px;color:var(--text-dim);margin-top:1px;}
+.peak-threshold-row input{
+  width:80px;padding:6px 10px;border:1px solid var(--border);border-radius:5px;
+  font-size:13px;text-align:center;background:var(--surface2);color:var(--text);
+}
+.peak-threshold-row input:focus{outline:none;border-color:var(--accent);}
+
 ::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
-@media(max-width:700px){.g2,.g5{grid-template-columns:1fr;}main{padding:12px;}}
+@media(max-width:700px){.g2,.g5{grid-template-columns:1fr;}main{padding:12px;}.peaks-summary{grid-template-columns:1fr 1fr;}}
 </style>
 </head>
 <body>
@@ -227,6 +272,38 @@ canvas{display:block;}
       <div class="card"><div class="card-title">Tiempo en zonas</div><div id="zoneBars"></div><canvas id="zoneC" height="180" style="margin-top:12px"></canvas></div>
       <div class="card"><div class="card-title">Histograma de FC</div><canvas id="histC" height="220"></canvas></div>
     </div>
+
+    <!-- ===== NEW: PEAK DETECTION CARD ===== -->
+    <div class="card" id="peaksCard">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div class="card-title" style="margin:0">⚡ Picos de FC detectados</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="peak-threshold-row" style="border:none;padding:0;margin:0">
+            <div>
+              <label>Umbral de pico</label>
+              <small>FC mínima para considerar pico</small>
+            </div>
+          </div>
+          <input type="number" id="peakThreshold" value="150" min="100" max="200" step="1"
+            style="width:72px;padding:6px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;text-align:center;background:var(--surface2);color:var(--text);"
+            onchange="recomputePeaks()">
+          <span style="font-size:11px;color:var(--text-dim)">bpm</span>
+          <input type="number" id="peakGap" value="60" min="10" max="300" step="10"
+            style="width:72px;padding:6px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;text-align:center;background:var(--surface2);color:var(--text);"
+            onchange="recomputePeaks()">
+          <span style="font-size:11px;color:var(--text-dim)">seg separación</span>
+        </div>
+      </div>
+      <div id="peaksSummary" class="peaks-summary"></div>
+      <div id="peaksList"></div>
+      <div id="peaksEmpty" class="empty-state" style="padding:24px 20px;display:none">
+        <div class="ei" style="font-size:28px;margin-bottom:6px">🔍</div>
+        <h3 style="font-size:14px">Sin picos detectados</h3>
+        <p style="font-size:12px">Baja el umbral para detectar más picos</p>
+      </div>
+    </div>
+    <!-- ===== END PEAK DETECTION ===== -->
+
     <div class="card"><div class="card-title">Estadísticas detalladas</div>
       <table class="stbl"><thead><tr><th>Parámetro</th><th>Valor</th><th>Zona</th><th>Interpretación</th></tr></thead><tbody id="statsTbody"></tbody></table>
     </div>
@@ -315,7 +392,7 @@ canvas{display:block;}
 let activities=[],selectedAct=null,profile={age:62,restHR:52,maxHR:172,name:'Deportista'};
 let activeFilter='all',pendingAct=null,modalType='',editIdx=null;
 let fileQueue=[],processingQueue=false;
-let cmpTray=[]; // string ids
+let cmpTray=[];
 let activeMods=new Set(['overview','zones','curves','trimp','recovery','table']);
 const CC=['#0070f3','#ef4444','#22c55e','#f97316','#8b5cf6','#ec4899'];
 const CATS=[
@@ -549,8 +626,162 @@ function renderAnalysis(a){
     ['Zona principal',zones[tz].name,`${Math.round(a.zoneTimes[tz]/tot*100)}% del tiempo`,'Tipo de esfuerzo predominante'],
     ['FCmáx teórica',`${220-profile.age} bpm`,`vs real ${profile.maxHR} bpm`,`+${profile.maxHR-(220-profile.age)} bpm`],
   ].map(([p,v,z,d])=>`<tr><td style="color:var(--text-dim);font-size:11px">${p}</td><td style="font-weight:600">${v}</td><td style="color:var(--text-mid);font-size:12px">${z}</td><td style="color:var(--text-dim);font-size:12px">${d}</td></tr>`).join('');
-  setTimeout(()=>{drawHR(a);drawZone(a);drawHist(a);},50);
+  setTimeout(()=>{drawHR(a);drawZone(a);drawHist(a);renderPeaks(a);},50);
 }
+
+// ============================================================
+// === PEAK DETECTION — NEW FEATURE ===
+// ============================================================
+
+/**
+ * detectPeaks(hrData, duration, thresholdBpm, minGapSec)
+ *
+ * Algorithm:
+ * 1. Find all contiguous runs of samples >= thresholdBpm
+ * 2. Merge runs that are separated by < minGapSec seconds
+ * 3. For each run compute: peak bpm, start/end time, duration, zone
+ * 4. Sort by peak bpm descending
+ *
+ * hrData   : array of HR values (one per sample)
+ * duration : total session duration in minutes
+ * thresholdBpm : minimum HR to count as "peak"
+ * minGapSec    : merge peaks closer than this many seconds
+ */
+function detectPeaks(hrData, duration, thresholdBpm, minGapSec){
+  if(!hrData || !hrData.length) return [];
+
+  // seconds per sample
+  const totalSec = duration * 60;
+  const secPerSample = totalSec / hrData.length;
+  const minGapSamples = Math.round(minGapSec / secPerSample);
+
+  // Step 1: find raw runs above threshold
+  const runs = [];
+  let inRun = false, runStart = 0;
+  hrData.forEach((v, i) => {
+    if(v >= thresholdBpm && !inRun){ inRun = true; runStart = i; }
+    if(v < thresholdBpm && inRun){ inRun = false; runs.push([runStart, i-1]); }
+  });
+  if(inRun) runs.push([runStart, hrData.length-1]);
+
+  if(!runs.length) return [];
+
+  // Step 2: merge runs closer than minGapSamples
+  const merged = [runs[0]];
+  for(let i=1; i<runs.length; i++){
+    const last = merged[merged.length-1];
+    if(runs[i][0] - last[1] <= minGapSamples){
+      merged[merged.length-1] = [last[0], runs[i][1]];
+    } else {
+      merged.push(runs[i]);
+    }
+  }
+
+  // Step 3: compute stats per merged peak
+  return merged.map((run, idx) => {
+    const [s, e] = run;
+    const segment = hrData.slice(s, e+1);
+    const peakBpm = Math.max(...segment);
+    const avgBpm = Math.round(segment.reduce((a,b)=>a+b,0)/segment.length);
+    const durationSec = Math.round((e - s + 1) * secPerSample);
+    const startMin = Math.round(s * secPerSample / 60 * 10) / 10;
+    const endMin   = Math.round((e+1) * secPerSample / 60 * 10) / 10;
+    const zone = zoneFor(peakBpm);
+    return { idx: idx+1, peakBpm, avgBpm, durationSec, startMin, endMin, zone };
+  }).sort((a,b) => b.peakBpm - a.peakBpm);
+}
+
+function fmtSec(s){
+  if(s < 60) return s+'s';
+  const m = Math.floor(s/60), sec = s%60;
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
+}
+function fmtMin(m){
+  const h = Math.floor(m/60), mm = Math.round((m%60)*10)/10;
+  return h > 0 ? `${h}h ${mm}min` : `${mm}min`;
+}
+
+function recomputePeaks(){
+  if(selectedAct) renderPeaks(selectedAct);
+}
+
+function renderPeaks(a){
+  const threshEl = document.getElementById('peakThreshold');
+  const gapEl    = document.getElementById('peakGap');
+  const threshold = parseInt(threshEl?.value) || 150;
+  const gap       = parseInt(gapEl?.value)    || 60;
+
+  const peaks = detectPeaks(a.hrData, a.duration, threshold, gap);
+
+  const listEl    = document.getElementById('peaksList');
+  const summaryEl = document.getElementById('peaksSummary');
+  const emptyEl   = document.getElementById('peaksEmpty');
+
+  if(!peaks.length){
+    listEl.innerHTML = '';
+    summaryEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  // Summary row
+  const totalPeakSec = peaks.reduce((s,p)=>s+p.durationSec, 0);
+  const maxPeakBpm   = Math.max(...peaks.map(p=>p.peakBpm));
+  const longestPeak  = peaks.reduce((a,b)=>b.durationSec>a.durationSec?b:a);
+
+  summaryEl.innerHTML = `
+    <div class="peaks-summary-item">
+      <div class="val" style="color:#ef4444">${peaks.length}</div>
+      <div class="lbl">Picos detectados</div>
+    </div>
+    <div class="peaks-summary-item">
+      <div class="val" style="color:#f97316">${fmtSec(totalPeakSec)}</div>
+      <div class="lbl">Tiempo total en picos</div>
+    </div>
+    <div class="peaks-summary-item">
+      <div class="val" style="color:#8b5cf6">${fmtSec(longestPeak.durationSec)}</div>
+      <div class="lbl">Pico más largo</div>
+    </div>
+  `;
+
+  // Max duration for bar scaling
+  const maxDur = Math.max(...peaks.map(p=>p.durationSec));
+
+  listEl.innerHTML = peaks.map((p, i) => {
+    const barWidth = Math.round(p.durationSec / maxDur * 100);
+    const zColor = p.zone.z.color;
+    const rankLabel = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+    const intensity = p.peakBpm >= profile.maxHR * 0.95 ? '⚡ Máxima' :
+                      p.peakBpm >= profile.maxHR * 0.85 ? '🔴 Alta' :
+                      p.peakBpm >= profile.maxHR * 0.75 ? '🟠 Moderada' : '🟡 Controlada';
+
+    return `
+      <div class="peak-item">
+        <div class="peak-badge" style="background:${zColor}">
+          <span style="font-size:16px">${rankLabel}</span>
+        </div>
+        <div class="peak-info">
+          <div class="peak-bpm" style="color:${zColor}">${p.peakBpm} <span style="font-size:12px;font-weight:400;color:var(--text-dim)">bpm pico</span></div>
+          <div class="peak-meta">
+            Media ${p.avgBpm} bpm · ${p.zone.z.name.split('·')[0].trim()}
+            · min ${fmtMin(p.startMin)}–${fmtMin(p.endMin)}
+            · ${intensity}
+          </div>
+        </div>
+        <div class="peak-dur-bar">
+          <div class="peak-dur-val">${fmtSec(p.durationSec)}</div>
+          <div class="peak-dur-sub">duración</div>
+          <div class="peak-minibar" style="width:${Math.max(barWidth, 15)}%;background:${zColor}44;border:1px solid ${zColor}88;position:relative">
+            <div style="height:100%;width:100%;background:${zColor};border-radius:2px;opacity:.7"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+// ============================================================
+// === END PEAK DETECTION ===
+// ============================================================
 
 // === CANVAS CHARTS ===
 function setupCanvas(id){
@@ -583,6 +814,31 @@ function drawHR(a){
   });
   ctx.strokeStyle='#ef444466';ctx.lineWidth=1;ctx.setLineDash([5,4]);
   ctx.beginPath();ctx.moveTo(pad.l,yS(profile.maxHR));ctx.lineTo(W-pad.r,yS(profile.maxHR));ctx.stroke();ctx.setLineDash([]);
+
+  // Highlight peak regions on the HR chart
+  const threshold = parseInt(document.getElementById('peakThreshold')?.value)||150;
+  const gap       = parseInt(document.getElementById('peakGap')?.value)||60;
+  const peaks = detectPeaks(a.hrData, a.duration, threshold, gap);
+  peaks.forEach(p => {
+    const totalSec = a.duration * 60;
+    const xStart = pad.l + (p.startMin/a.duration)*dW;
+    const xEnd   = pad.l + (p.endMin/a.duration)*dW;
+    ctx.fillStyle = p.zone.z.color + '28';
+    ctx.fillRect(xStart, pad.t, Math.max(xEnd-xStart, 2), dH);
+    ctx.strokeStyle = p.zone.z.color + '80';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(xStart, pad.t); ctx.lineTo(xStart, pad.t+dH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xEnd,   pad.t); ctx.lineTo(xEnd,   pad.t+dH); ctx.stroke();
+    ctx.setLineDash([]);
+    // peak bpm label
+    ctx.fillStyle = p.zone.z.color;
+    ctx.font = 'bold 9px system-ui';
+    ctx.textAlign = 'center';
+    const cx = (xStart+xEnd)/2;
+    ctx.fillText(p.peakBpm+'bpm', Math.min(Math.max(cx, pad.l+18), W-pad.r-18), pad.t+12);
+  });
+
   ctx.strokeStyle='#0070f3';ctx.lineWidth=2;ctx.beginPath();
   d.forEach((v,i)=>i===0?ctx.moveTo(xS(i),yS(v)):ctx.lineTo(xS(i),yS(v)));ctx.stroke();
   ctx.fillStyle='rgba(0,112,243,0.08)';ctx.beginPath();
@@ -827,7 +1083,6 @@ function cmProgress(id,sel){
   });
   ctx.fillStyle='#6b7280';ctx.font='9px system-ui';ctx.textAlign='center';
   sorted.forEach((a,i)=>{const x=pad.l+i*dW/(n-1);ctx.fillText(a.startTime.toLocaleDateString('es-ES',{day:'numeric',month:'short'}),x,H-36);ctx.fillText(a.name.length>10?a.name.slice(0,10)+'…':a.name,x,H-24);});
-  // legend
   ctx.strokeStyle='#0070f3';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pad.l,10);ctx.lineTo(pad.l+18,10);ctx.stroke();ctx.fillStyle='#374151';ctx.font='10px system-ui';ctx.textAlign='left';ctx.fillText('FC Media',pad.l+22,14);
   ctx.strokeStyle='#ef4444';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(pad.l+95,10);ctx.lineTo(pad.l+113,10);ctx.stroke();ctx.setLineDash([]);ctx.fillText('FC Máx',pad.l+117,14);
 }
@@ -876,7 +1131,9 @@ function updateBkStatus(){
 function exportJSON(){
   if(!activities.length){alert('Sin actividades');return;}
   const d={v:1,exportedAt:new Date().toISOString(),activities:activities.map(a=>({...a,startTime:a.startTime.toISOString()}))};
-  showExportModal(JSON.stringify(d,null,2),'hranalyzer_'+today()+'.json','json');
+  const content=JSON.stringify(d,null,2);
+  const filename='hranalyzer_'+today()+'.json';
+  triggerDownload(content,'application/json',filename,'json');
 }
 function exportCSV(){
   if(!activities.length){alert('Sin actividades');return;}
@@ -889,7 +1146,50 @@ function exportCSV(){
       Math.round(a.max/profile.maxHR*100),a.p95||'',a.recovery>0?a.recovery:'',
       trimp(a),effort(a),...a.zoneTimes.map(t=>Math.round(t/tot*100)),'Z'+(tz+1),a.hrData.length].join(',');
   });
-  showExportModal([hdr,...rows].join('\n'),'hranalyzer_'+today()+'.csv','csv');
+  const content=[hdr,...rows].join('\n');
+  const filename='hranalyzer_'+today()+'.csv';
+  triggerDownload(content,'text/csv',filename,'csv');
+}
+
+/**
+ * triggerDownload — descarga nativa con fallback para iOS/Safari.
+ *
+ * Estrategia:
+ * 1. Intenta Web Share API (iOS 15+, Safari): abre el menú compartir nativo
+ *    con el archivo ya formado → el usuario elige "Guardar en Archivos"
+ *    y puede darle el nombre que quiera (con extensión correcta).
+ * 2. Si Web Share no está disponible (escritorio, Chrome), usa <a download>
+ *    para descarga directa.
+ * 3. Fallback final: modal de copia manual.
+ */
+async function triggerDownload(content, mimeType, filename, type){
+  const blob = new Blob([content], {type: mimeType});
+
+  // — Opción 1: Web Share API con archivo (iOS Safari 15+) —
+  if(navigator.share && navigator.canShare){
+    const file = new File([blob], filename, {type: mimeType});
+    if(navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({files:[file], title: filename});
+        return;
+      }catch(e){
+        // Usuario canceló el share → no mostrar error
+        if(e.name==='AbortError') return;
+      }
+    }
+  }
+
+  // — Opción 2: <a download> (Chrome, Firefox, Edge, desktop Safari) —
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display='none';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1000);
+
+  // Comprobamos si el click realmente funciona (en iOS < 15 no hace nada)
+  // mostramos modal de copia como ayuda adicional
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if(isIOS) showExportModal(content, filename, type);
 }
 function importJSON(input){
   const file=input.files[0];if(!file)return;
@@ -911,7 +1211,7 @@ function importJSON(input){
 }
 function today(){return new Date().toISOString().slice(0,10);}
 
-function showExportModal(content, filename, type){
+function showExportModal(content,filename,type){
   const ex=document.getElementById('exportModal');if(ex)ex.remove();
   const ov=document.createElement('div');
   ov.id='exportModal';
@@ -932,7 +1232,6 @@ function showExportModal(content, filename, type){
   document.getElementById('expTA').value=content;
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
 }
-
 function doCopy(){
   const ta=document.getElementById('expTA'),btn=document.getElementById('expCopyBtn');
   ta.select();ta.setSelectionRange(0,999999);
