@@ -876,8 +876,20 @@ function updateBkStatus(){
 function exportJSON(){
   if(!activities.length){alert('Sin actividades');return;}
   const d={v:1,exportedAt:new Date().toISOString(),activities:activities.map(a=>({...a,startTime:a.startTime.toISOString()}))};
-  dlData(JSON.stringify(d,null,2),'application/json','hranalyzer_'+today()+'.json');
-  showBkAlert('ok','📦 '+activities.length+' actividades listas para descargar.');
+  showExportModal(JSON.stringify(d,null,2),'hranalyzer_'+today()+'.json','json');
+}
+function exportCSV(){
+  if(!activities.length){alert('Sin actividades');return;}
+  const types={mtb:'Mountain Bike',hiking:'Hiking',wod:'WOD',run:'Running',other:'Otra'};
+  const hdr='Nombre,Tipo,Fecha,Duracion (min),FC Max,FC Media,FC Min,% FCmax,P95,Recuperacion,TRIMP,Esfuerzo,Z1%,Z2%,Z3%,Z4%,Z5%,Zona,Lecturas';
+  const rows=activities.sort((a,b)=>b.startTime-a.startTime).map(a=>{
+    const tot=a.zoneTimes.reduce((s,v)=>s+v,0)||1,tz=a.zoneTimes.indexOf(Math.max(...a.zoneTimes));
+    return[`"${(a.name||'').replace(/"/g,'""')}"`,`"${types[a.type]||a.type}"`,
+      a.startTime.toLocaleDateString('es-ES'),a.duration,a.max,a.avg,a.min,
+      Math.round(a.max/profile.maxHR*100),a.p95||'',a.recovery>0?a.recovery:'',
+      trimp(a),effort(a),...a.zoneTimes.map(t=>Math.round(t/tot*100)),'Z'+(tz+1),a.hrData.length].join(',');
+  });
+  showExportModal([hdr,...rows].join('\n'),'hranalyzer_'+today()+'.csv','csv');
 }
 function importJSON(input){
   const file=input.files[0];if(!file)return;
@@ -891,95 +903,43 @@ function importJSON(input){
       const newOnes=imported.filter(a=>!ids.has(a.id));
       activities=[...activities,...newOnes];
       save();renderActList();updateCmp();
-      showBkAlert('ok','📥 '+newOnes.length+' actividades restauradas'+(imported.length-newOnes.length?' ('+( imported.length-newOnes.length)+' duplicadas omitidas)':'')+'.');
+      showBkAlert('ok','📥 '+newOnes.length+' actividades restauradas'+(imported.length-newOnes.length?' ('+(imported.length-newOnes.length)+' duplicadas omitidas)':'')+'.');
     }catch(e){alert('Error al leer el archivo.');}
     input.value='';
   };
   r.readAsText(file);
 }
-function exportCSV(){
-  if(!activities.length){alert('Sin actividades');return;}
-  const types={mtb:'Mountain Bike',hiking:'Hiking',wod:'WOD',run:'Running',other:'Otra'};
-  const hdr='Nombre,Tipo,Fecha,Duracion (min),FC Max,FC Media,FC Min,% FCmax,P95,Recuperacion,TRIMP,Esfuerzo,Z1%,Z2%,Z3%,Z4%,Z5%,Zona,Lecturas';
-  const rows=activities.sort((a,b)=>b.startTime-a.startTime).map(a=>{
-    const tot=a.zoneTimes.reduce((s,v)=>s+v,0)||1,tz=a.zoneTimes.indexOf(Math.max(...a.zoneTimes));
-    return[`"${(a.name||'').replace(/"/g,'""')}"`,`"${types[a.type]||a.type}"`,
-      a.startTime.toLocaleDateString('es-ES'),a.duration,a.max,a.avg,a.min,
-      Math.round(a.max/profile.maxHR*100),a.p95||'',a.recovery>0?a.recovery:'',
-      trimp(a),effort(a),...a.zoneTimes.map(t=>Math.round(t/tot*100)),'Z'+(tz+1),a.hrData.length].join(',');
-  });
-  dlData([hdr,...rows].join('\n'),'text/csv','hranalyzer_'+today()+'.csv');
-  showBkAlert('ok','📊 '+activities.length+' actividades listas para descargar en CSV.');
-}
+function today(){return new Date().toISOString().slice(0,10);}
 
-function dlData(content, type, filename) {
-  // Try standard download first
-  try {
-    const blob = new Blob([content], {type});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return;
-  } catch(e) {}
-
-  // Fallback: data URI
-  try {
-    const encoded = type.includes('json')
-      ? 'data:application/json;charset=utf-8,' + encodeURIComponent(content)
-      : 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
-    const a = document.createElement('a');
-    a.href = encoded; a.download = filename;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    return;
-  } catch(e) {}
-
-  // Last resort: show in modal for manual copy
-  showExportModal(content, filename);
-}
-
-function showExportModal(content, filename) {
-  // Remove existing modal if any
-  const existing = document.getElementById('exportModal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'exportModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;';
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.2)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div>
-          <div style="font-size:16px;font-weight:700;color:var(--accent)">📋 Exportar: ${filename}</div>
-          <div style="font-size:12px;color:var(--text-dim);margin-top:3px">Copia el contenido y pégalo en un archivo de texto. Guárdalo con el nombre <strong>${filename}</strong></div>
-        </div>
-        <button onclick="document.getElementById('exportModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-dim)">×</button>
+function showExportModal(content, filename, type){
+  const ex=document.getElementById('exportModal');if(ex)ex.remove();
+  const ov=document.createElement('div');
+  ov.id='exportModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:12px;padding:22px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:10px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#0070f3;margin-bottom:4px">📋 ${filename}</div>
+        <div style="font-size:12px;color:#6b7280;line-height:1.5">${type==='json'?'1️⃣ Pulsa <strong>Copiar</strong> &nbsp;·&nbsp; 2️⃣ Abre <strong>Notas</strong> y pega &nbsp;·&nbsp; 3️⃣ Guarda como <strong>.json</strong><br>En GitHub Pages podrás descargarlo directamente.':'1️⃣ Pulsa <strong>Copiar</strong> &nbsp;·&nbsp; 2️⃣ Pega en <strong>Numbers</strong> o guarda como <strong>.csv</strong>'}</div>
       </div>
-      <button onclick="copyExport()" class="btn btn-primary" style="margin-bottom:12px;width:100%">📋 Copiar todo al portapapeles</button>
-      <textarea id="exportContent" readonly style="flex:1;min-height:300px;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;resize:none;background:var(--surface2);color:var(--text)">${content.replace(/</g,'&lt;')}</textarea>
-    </div>`;
-  document.body.appendChild(modal);
-  // Actually set the textarea value (not innerHTML to avoid HTML encoding issues)
-  document.getElementById('exportContent').value = content;
+      <button onclick="document.getElementById('exportModal').remove()" style="background:none;border:none;font-size:26px;cursor:pointer;color:#6b7280;flex-shrink:0;line-height:1;padding:0">×</button>
+    </div>
+    <button id="expCopyBtn" onclick="doCopy()" style="background:#0070f3;color:#fff;border:none;border-radius:8px;padding:13px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:10px;width:100%;letter-spacing:.5px">📋 COPIAR AL PORTAPAPELES</button>
+    <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">${content.split('\n').length} líneas · ${Math.round(content.length/1024*10)/10} KB</div>
+    <textarea id="expTA" readonly style="flex:1;min-height:260px;padding:10px;border:1px solid #e2e6ed;border-radius:8px;font-family:monospace;font-size:10px;resize:none;background:#f7f8fa;color:#111827;line-height:1.4"></textarea>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('expTA').value=content;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
 }
 
-function copyExport() {
-  const ta = document.getElementById('exportContent');
-  ta.select();
-  try {
-    navigator.clipboard.writeText(ta.value).then(() => {
-      showBkAlert('ok', '✅ Copiado al portapapeles. Pégalo en un archivo de texto y guárdalo.');
-    }).catch(() => {
-      document.execCommand('copy');
-      showBkAlert('ok', '✅ Copiado. Pégalo en un archivo de texto y guárdalo.');
-    });
-  } catch(e) {
-    document.execCommand('copy');
-    showBkAlert('ok', '✅ Copiado. Pégalo en un archivo de texto y guárdalo.');
-  }
+function doCopy(){
+  const ta=document.getElementById('expTA'),btn=document.getElementById('expCopyBtn');
+  ta.select();ta.setSelectionRange(0,999999);
+  const ok=()=>{btn.textContent='✅ COPIADO';btn.style.background='#16a34a';setTimeout(()=>{btn.textContent='📋 COPIAR AL PORTAPAPELES';btn.style.background='#0070f3';},2500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(ok).catch(()=>{try{document.execCommand('copy');ok();}catch(e){alert('Selecciona el texto y cópialo manualmente (Cmd+A, Cmd+C).');}});
+  }else{try{document.execCommand('copy');ok();}catch(e){alert('Selecciona el texto y cópialo manualmente.');}}
 }
 function showBkAlert(type,text){
   const el=document.getElementById('backupStatus'),t=document.getElementById('backupStatusText');
